@@ -1,0 +1,12 @@
+node_modules/
+.local/
+.env
+.env.*
+!.env.example
+*.tgz
+*.zip
+SHA256SUMS
+*.log
+*.dpapi
+session.json
+.DS_Store

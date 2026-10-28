@@ -1,0 +1,6 @@
+# Windows: install.cmd registers absolute paths automatically.
+# For manual configuration, replace both example paths with your own paths.
+# No customer API keys or service URL environment variables are required.
+[mcp_servers.threads-comments]
+command = 'C:\Program Files\nodejs\node.exe'
+args = ['C:\Users\YOUR_USER\AppData\Local\ThreadsCommentMcp\customer-client\0.1.1\node_modules\threads-comment-client\src\index.mjs']

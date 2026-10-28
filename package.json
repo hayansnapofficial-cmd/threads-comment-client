@@ -1,0 +1,16 @@
+{
+  "name": "threads-comment-client",
+  "version": "0.1.1",
+  "description": "Local stdio MCP client for a managed Threads comment assistant service",
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": { "node": ">=22.15" },
+  "bin": { "threads-comment-client": "src/index.mjs" },
+  "files": ["src/", "README.md", "codex-config.example.toml"],
+  "scripts": { "start": "node src/index.mjs", "test": "node --test test/*.test.mjs" },
+  "repository": { "type": "git", "url": "git+https://github.com/hayansnapofficial-cmd/threads-comment-client.git" },
+  "homepage": "https://github.com/hayansnapofficial-cmd/threads-comment-client#readme",
+  "bugs": { "url": "https://github.com/hayansnapofficial-cmd/threads-comment-client/issues" },
+  "dependencies": { "@modelcontextprotocol/server": "2.4.0", "zod": "4.6.7" },
+  "devDependencies": { "@modelcontextprotocol/client": "2.4.0" }
+}
