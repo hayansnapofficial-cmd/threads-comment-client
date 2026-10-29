@@ -44,10 +44,25 @@ function wrap(result) { return {content: [{type: 'text', text: JSON.stringify(re
 
 export class PlatformClient {
   #serviceInput; #fetch; #store; #pair; #now; #pendingStart; #pendingFinish; #unsavedSession;
+  #credentialQueue = Promise.resolve();
   constructor({serviceUrl = process.env.THREADS_SERVICE_URL || DEFAULT_SERVICE_URL, fetchImpl = globalThis.fetch, store = createCredentialStore(), now = Date.now} = {}) {
     this.#serviceInput = serviceUrl; this.#fetch = fetchImpl; this.#store = store; this.#now = now;
   }
   #base() { return normalizeServiceUrl(this.#serviceInput); }
+  #withCredentialLock(action) {
+    const pending = this.#credentialQueue.then(action);
+    this.#credentialQueue = pending.catch(() => {});
+    return pending;
+  }
+  async #clearSessionIfCurrent(session) {
+    return this.#withCredentialLock(async () => {
+      try {
+        const saved = await this.#store.read();
+        if (saved?.serviceUrl === session.serviceUrl && saved.accessToken === session.accessToken) await this.#store.remove();
+      } catch { throw new ClientError('CREDENTIAL_STORAGE_FAILED'); }
+      if (this.#unsavedSession?.accessToken === session.accessToken && this.#unsavedSession.serviceUrl === session.serviceUrl) this.#unsavedSession = undefined;
+    });
+  }
   async #session() {
     const base = this.#base();
     try {
@@ -119,7 +134,7 @@ export class PlatformClient {
     try { return await this.#pendingFinish; } finally { this.#pendingFinish = undefined; }
   }
   async #finish() {
-    if (this.#unsavedSession) return this.#saveReceivedSession();
+    if (this.#unsavedSession) return this.#withCredentialLock(() => this.#saveReceivedSession());
     if (!this.#pair) throw new ClientError('LOGIN_NOT_STARTED');
     if (Date.parse(this.#pair.expiresAt) <= this.#now()) { this.#pair = undefined; throw new ClientError('LOGIN_EXPIRED'); }
     const pair = this.#pair;
@@ -133,12 +148,15 @@ export class PlatformClient {
     if (result.status !== 'connected' || typeof result.accessToken !== 'string' || !/^[\x21-\x7e]{20,4096}$/.test(result.accessToken) || !Number.isFinite(Date.parse(result.expiresAt))) throw new ClientError('INVALID_RESPONSE');
     // A successful poll consumes the pairing. Preserve the received credential
     // privately until saving succeeds, so a disk failure never causes re-polling.
-    this.#unsavedSession = {version: 1, serviceUrl: this.#base(), accessToken: result.accessToken, expiresAt: result.expiresAt, account: summary(result.account)};
-    if (this.#pair === pair) this.#pair = undefined;
-    return this.#saveReceivedSession();
+    return this.#withCredentialLock(() => {
+      this.#unsavedSession = {version: 1, serviceUrl: this.#base(), accessToken: result.accessToken, expiresAt: result.expiresAt, account: summary(result.account)};
+      if (this.#pair === pair) this.#pair = undefined;
+      return this.#saveReceivedSession();
+    });
   }
   async #saveReceivedSession() {
     const session = this.#unsavedSession;
+    if (!session) throw new ClientError('LOGIN_NOT_STARTED');
     try { await this.#store.write(session); }
     catch { throw new ClientError('SESSION_SAVE_PENDING'); }
     if (this.#unsavedSession === session) this.#unsavedSession = undefined;
@@ -147,11 +165,11 @@ export class PlatformClient {
   async disconnect() {
     const session = await this.#session();
     if (!session) { this.#pair = undefined; return wrap({status: 'disconnected'}); }
+    const pair = this.#pair;
     // A failed revoke must not silently discard the only local means to revoke it.
     await this.#request('connect/revoke', {token: session.accessToken});
-    try { await this.#store.remove(); } catch { throw new ClientError('CREDENTIAL_STORAGE_FAILED'); }
-    this.#unsavedSession = undefined;
-    this.#pair = undefined;
+    await this.#clearSessionIfCurrent(session);
+    if (this.#pair === pair) this.#pair = undefined;
     return wrap({status: 'disconnected'});
   }
   async call(name, args = {}) {
@@ -164,8 +182,7 @@ export class PlatformClient {
     try { result = await this.#request(`api/tools/${encodeURIComponent(name)}`, {body: args, token: session.accessToken}); }
     catch (error) {
       if (error instanceof ClientError && error.code === 'LOGIN_REQUIRED') {
-        try { await this.#store.remove(); } catch { throw new ClientError('CREDENTIAL_STORAGE_FAILED'); }
-        this.#unsavedSession = undefined;
+        await this.#clearSessionIfCurrent(session);
       }
       throw error;
     }
@@ -175,6 +192,18 @@ export class PlatformClient {
       throw new ClientError(errorCode(code));
     }
     if (!Array.isArray(result.content) || result.content.some(entry => !object(entry) || entry.type !== 'text' || typeof entry.text !== 'string')) throw new ClientError('INVALID_RESPONSE');
+    if (name === 'delete_account_data') {
+      const receipt = result.structuredContent?.result;
+      if (!object(receipt) || !['completed', 'superseded'].includes(receipt.status) || typeof receipt.confirmationCode !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(receipt.confirmationCode) || receipt.statusUrl !== new URL(`data-deletion/status/${receipt.confirmationCode}`, this.#base()).href) throw new ClientError('INVALID_RESPONSE');
+      if (receipt.status === 'completed') {
+        try { await this.#clearSessionIfCurrent(session); }
+        catch {
+          // The server operation has succeeded. Keep its receipt rather than
+          // presenting local cleanup failure as a reason to repeat deletion.
+          result = {...result, structuredContent: {...result.structuredContent, result: {...receipt, localSessionCleared: false, message: '서버의 계정 자료 삭제는 완료됐습니다. 이 컴퓨터의 연결 정보 정리에 실패했습니다. 삭제 요청을 반복하지 말고 상태 링크를 보관한 뒤 운영자에게 문의하세요.'}}};
+        }
+      }
+    }
     // The platform contract never returns provider credentials. Redact accidental
     // credential-shaped values and our own session even in a successful response.
     const forbidden = [session.accessToken, this.#pair?.verifier].filter(Boolean);

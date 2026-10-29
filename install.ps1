@@ -4,7 +4,7 @@ param([switch]$CheckOnly)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$script:ThreadsClientVersion = '0.1.1'
+$script:ThreadsClientVersion = '0.1.2'
 $script:ThreadsClientAsset = "threads-comment-client-$script:ThreadsClientVersion.tgz"
 
 function Get-InstallerCommand {

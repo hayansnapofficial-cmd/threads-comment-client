@@ -28,6 +28,8 @@ function fixture(handler = () => ({}), initial = null) {
   return {client: new PlatformClient({serviceUrl, fetchImpl, store}), store, calls};
 }
 const started = () => ({id: 'pair-0123456789abcdef', loginUrl: `${serviceUrl}connect/authorize?pair=pair-0123456789abcdef`, expiresAt: future});
+const deletion = (status = 'completed') => ({content: [], structuredContent: {result: {status, confirmationCode: 'c'.repeat(43), statusUrl: `${serviceUrl}data-deletion/status/${'c'.repeat(43)}`}}});
+const deletionInput = {confirmationUsername: 'sample_business', requestId: 'ba6e36ea-22f1-4f34-aa8f-d7245e51adac'};
 
 test('missing/unsafe service URL never asks customers for provider secrets or makes requests', async () => {
   for (const value of ['', 'http://localhost:1234/', 'https://user:pass@example.test/', 'https://example.test/?token=secret', 'https://example.test/#fragment']) {
@@ -214,6 +216,39 @@ test('HTTP 401 invalidates local session for re-login; 403 does not', async () =
   assert.ok(forbidden.store.value());
 });
 
+test('confirmed account deletion clears only the completed session and preserves the receipt', async () => {
+  const done = fixture(call => {assert.equal(call.url, `${serviceUrl}api/tools/delete_account_data`);assert.deepEqual(call.body, deletionInput);return deletion();}, session());
+  const result = await done.client.call('delete_account_data', deletionInput);
+  assert.equal(result.structuredContent.result.status, 'completed');assert.equal(result.structuredContent.result.statusUrl, deletion().structuredContent.result.statusUrl);assert.equal(done.store.value(), null);
+  const newer = fixture(() => deletion('superseded'), session());
+  assert.equal((await newer.client.call('delete_account_data', deletionInput)).structuredContent.result.status, 'superseded');assert.equal(newer.store.value().accessToken, sessionToken);
+});
+
+test('malformed deletion receipt or foreign status URL never clears credentials', async () => {
+  for (const change of [{status: 'pending'}, {confirmationCode: 'short'}, {statusUrl: 'https://attacker.example/status'}, {statusUrl: `${serviceUrl}data-deletion/status/${'d'.repeat(43)}`}]) {
+    const response = deletion();Object.assign(response.structuredContent.result, change);
+    const f = fixture(() => response, session());
+    await assert.rejects(f.client.call('delete_account_data', deletionInput), {code: 'INVALID_RESPONSE'});assert.equal(f.store.value().accessToken, sessionToken);
+  }
+});
+
+test('deletion completion cannot erase a newer login saved while the request was pending', async () => {
+  let complete;const pending = new Promise(resolve => {complete = resolve;});
+  const freshToken = 'new-platform-session-secret-0987654321';
+  const f = fixture(call => call.url.endsWith('/delete_account_data') ? pending : call.url.endsWith('/connect/start') ? started() : call.url.endsWith('/connect/poll') ? {status:'connected',accessToken:freshToken,expiresAt:future} : {revoked:true}, session());
+  const deleting = f.client.call('delete_account_data', deletionInput);
+  while (!f.calls.some(call => call.url.endsWith('/delete_account_data'))) await new Promise(resolve => setImmediate(resolve));
+  await f.client.disconnect();await f.client.connect();await f.client.finish();
+  complete(deletion());await deleting;
+  assert.equal(f.store.value().accessToken, freshToken);
+});
+
+test('deletion retains successful server receipt if local credential cleanup fails', async () => {
+  const f = fixture(() => deletion(), session());f.store.remove = async () => {throw new Error('local disk failure');};
+  const result = await f.client.call('delete_account_data', deletionInput);
+  assert.equal(result.structuredContent.result.status, 'completed');assert.equal(result.structuredContent.result.localSessionCleared, false);assert.equal(result.structuredContent.result.statusUrl, deletion().structuredContent.result.statusUrl);assert.equal(f.calls.length, 1);
+});
+
 test('remote HTTP and MCP error messages never reveal credentials', async () => {
   const secret = 'apikey_private_secret_do_not_print';
   for (const response of [Response.json({error: {code: 'PROVIDER_FAILED', message: secret}}, {status: 502}), {isError: true, content: [{type: 'text', text: JSON.stringify({error: {code: 'PROVIDER_FAILED', message: secret}})}]}]) {
@@ -266,7 +301,7 @@ test('OS credential store roundtrip protects the saved platform session', async 
   }
 });
 
-test('packaged entry point serves 18 MCP tools and needs only Threads login with no URL configuration', async () => {
+test('packaged entry point serves 19 MCP tools and validates destructive deletion input without URL configuration', async () => {
   const parent = resolve(tmpdir());
   const directory = await mkdtemp(join(parent, 'threads-client-stdio-test-'));
   const client = new Client({name: 'distributed-client-test', version: '1.0.0'});
@@ -274,14 +309,19 @@ test('packaged entry point serves 18 MCP tools and needs only Threads login with
   try {
     await client.connect(transport);
     const {tools} = await client.listTools();
-    assert.equal(tools.length, 18);
-    assert.equal(new Set(tools.map(tool => tool.name)).size, 18);
+    assert.equal(tools.length, 19);
+    assert.equal(new Set(tools.map(tool => tool.name)).size, 19);
     const search = tools.find(tool => tool.name === 'search_threads');
     assert.equal(search.inputSchema.properties.query.type, 'string');
     assert.equal(search.inputSchema.properties.limit.maximum, 50);
     assert.ok(!search.inputSchema.required.includes('limit'), 'server-defaulted input stays optional');
     assert.equal(tools.find(tool => tool.name === 'publish_reply').inputSchema.properties.userConfirmed.const, true);
     assert.ok(tools.find(tool => tool.name === 'set_business_profile').inputSchema.properties.services);
+    const remove = tools.find(tool => tool.name === 'delete_account_data');
+    assert.equal(remove.annotations.destructiveHint, true);assert.equal(remove.annotations.readOnlyHint, false);assert.equal(remove.annotations.idempotentHint, true);
+    assert.equal(remove.inputSchema.properties.confirmationUsername.type, 'string');assert.equal(remove.inputSchema.properties.requestId.format, 'uuid');assert.deepEqual([...remove.inputSchema.required].sort(), ['confirmationUsername','requestId']);assert.equal(remove.inputSchema.additionalProperties, false);
+    const invalidDeletion = await client.callTool({name:'delete_account_data',arguments:{confirmationUsername:'sample_business',requestId:'not-a-uuid'}});
+    assert.equal(invalidDeletion.isError, true);assert.ok(!JSON.stringify(invalidDeletion).includes('LOGIN_REQUIRED'), 'invalid deletion input fails before authentication or network');
     const status = await client.callTool({name: 'connection_status', arguments: {}});
     assert.ok(!status.isError);
     assert.equal(status.structuredContent.result.loginRequired, true);

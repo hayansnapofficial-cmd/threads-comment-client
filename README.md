@@ -4,16 +4,18 @@ Codex에서 내 Threads 계정을 연결하는 고객용 MCP입니다. 서비스
 
 [설치 파일 다운로드](https://github.com/hayansnapofficial-cmd/threads-comment-client/releases/latest) · [회원용 가이드북](https://rabbitdevelopment.net/guides/threads-comments)
 
+[서비스 소개](https://mcp.rabbitdevelopment.net/) · [개인정보 처리방침](https://mcp.rabbitdevelopment.net/privacy) · [이용약관](https://mcp.rabbitdevelopment.net/terms) · [데이터 삭제 안내](https://mcp.rabbitdevelopment.net/data-deletion)
+
 ## 현재 제공 상태
 
-2026-10-28 기준 설치·계정 연결·재시작 후 연결 유지까지 확인했습니다. 일반 외부 계정 연결에 필요한 Meta 앱 권한 검수는 아직 완료되지 않았습니다. 공용 서비스의 Jev 검수, Apify 유료 수집, 실제 댓글 게시는 비활성 상태입니다. 설치만으로 이 기능이나 Meta 권한이 활성화되지는 않습니다.
+2026-10-29 기준 설치·계정 연결·재시작 후 연결 유지까지 확인했습니다. 일반 외부 계정 연결에 필요한 Meta 앱 권한 검수는 아직 완료되지 않았습니다. 공용 서비스의 Jev 검수, Apify 유료 수집, 실제 댓글 게시는 비활성 상태입니다. 설치만으로 이 기능이나 Meta 권한이 활성화되지는 않습니다.
 
 ## Windows 설치
 
 준비물은 Windows, [Node.js 22.15 이상](https://nodejs.org/en/download), Codex와 [Codex CLI](https://developers.openai.com/codex/cli)입니다. Codex 데스크톱만 설치했다면 PowerShell에서 `codex --version`이 실행되는지 확인합니다. CLI가 없다면 Node.js 설치 후 `npm.cmd install -g @openai/codex`로 설치합니다.
 
 1. 위 **설치 파일 다운로드**를 누릅니다.
-2. Releases의 **Assets**에서 `threads-comment-client-windows-0.1.1.zip`을 받습니다. 자동으로 표시되는 `Source code (zip)`은 개발 소스입니다.
+2. Releases의 **Assets**에서 `threads-comment-client-windows-0.1.2.zip`을 받습니다. 자동으로 표시되는 `Source code (zip)`은 개발 소스입니다.
 3. 받은 ZIP의 **압축을 모두 풀고** 그 폴더의 `install.cmd`를 실행합니다.
 4. 설치 완료 메시지를 확인하고 Codex를 완전히 종료한 뒤 다시 엽니다.
 5. 새 대화에서 아래 문장을 입력합니다.
@@ -22,14 +24,14 @@ Codex에서 내 Threads 계정을 연결하는 고객용 MCP입니다. 서비스
 
 열린 화면에서 본인 계정으로 로그인하고 동의를 마친 뒤, 채팅에 **로그인 완료**라고 알려 주세요. Codex가 연결 완료를 확인하고 이 컴퓨터에 연결을 저장합니다. 오른쪽 브라우저를 사용할 수 없는 환경에서는 로그인 링크를 엽니다. MCP 자체가 호스트의 브라우저 화면을 강제로 여는 방식은 아닙니다.
 
-설치 도구는 포함된 패키지의 SHA-256을 확인한 뒤 `%LOCALAPPDATA%/ThreadsCommentMcp/customer-client/0.1.1`에 설치하고 `threads-comments`라는 이름으로 Codex에 등록합니다. 관리자 권한을 요구하지 않으며 Node.js를 자동 설치하지 않습니다. npm 의존성을 받기 위한 인터넷 연결이 필요합니다.
+설치 도구는 포함된 패키지의 SHA-256을 확인한 뒤 `%LOCALAPPDATA%/ThreadsCommentMcp/customer-client/0.1.2`에 설치하고 `threads-comments`라는 이름으로 Codex에 등록합니다. 관리자 권한을 요구하지 않으며 Node.js를 자동 설치하지 않습니다. npm 의존성을 받기 위한 인터넷 연결이 필요합니다.
 
 ### 수동 설치
 
 Releases에서 `.tgz`를 받아 해당 폴더의 PowerShell에서 실행합니다.
 
 ```powershell
-npm.cmd install -g .\threads-comment-client-0.1.1.tgz
+npm.cmd install -g .\threads-comment-client-0.1.2.tgz
 $clientEntry = Join-Path ((npm.cmd root -g).Trim()) 'threads-comment-client/src/index.mjs'
 codex mcp add threads-comments -- (Get-Command node.exe).Source $clientEntry
 codex mcp get threads-comments
@@ -37,10 +39,12 @@ codex mcp get threads-comments
 
 공개 npm 레지스트리에는 아직 게시하지 않았습니다. 위 명령은 다운로드한 패키지를 설치합니다.
 
+기존 이용자도 최신 Windows 설치 ZIP의 `install.cmd`를 실행하거나 새 `.tgz`로 위 수동 설치·등록 과정을 진행한 뒤 Codex를 다시 열면 업데이트됩니다. 0.1.2에는 계정 자료 삭제 도구가 추가되어 총 19개 도구가 등록됩니다.
+
 macOS/Linux는 같은 `.tgz` 파일을 받아 다음과 같이 등록할 수 있습니다. Windows용 자동 설치 도구와 별개이며 현재 실제 로그인 검증 환경은 Windows입니다.
 
 ```sh
-npm install -g ./threads-comment-client-0.1.1.tgz
+npm install -g ./threads-comment-client-0.1.2.tgz
 codex mcp add threads-comments -- node "$(npm root -g)/threads-comment-client/src/index.mjs"
 ```
 
@@ -53,6 +57,18 @@ codex mcp add threads-comments -- node "$(npm root -g)/threads-comment-client/sr
 검색 권한과 서버 기능이 활성화되면 “○○ 관련 최근 글을 찾아 줘”, “이 글에 맞는 답글을 작성하고 검수해 줘”처럼 요청할 수 있습니다. 실제 게시 전에는 대상 글과 정확한 답글 본문을 확인하고 게시를 명시적으로 승인해야 합니다. 초안 작성은 게시 승인이 아닙니다.
 
 공식 Threads 검색을 먼저 사용하며, 실패했다고 Apify 유료 수집으로 자동 전환하지 않습니다. 유료 수집은 운영자가 설정한 한도 안에서 별도 비용 승인을 받아 실행합니다.
+
+## 계정 자료 삭제
+
+0.1.2 이상으로 업데이트한 뒤 Codex에 다음과 같이 요청합니다.
+
+> Threads 댓글 보조 서비스의 내 계정 자료를 삭제해 줘. 먼저 연결 계정과 삭제 범위를 보여 줘.
+
+연결된 계정명과 삭제 범위를 확인한 뒤 삭제를 승인하면 `delete_account_data`가 실행됩니다. 이 도구는 서버의 계정 연결·업체 정보·초안·게시 이력·캐시와 모든 기기의 서비스 세션을 삭제합니다. 이미 Threads에 게시한 답글이나 Codex 대화 기록은 삭제하지 않습니다.
+
+완료 응답의 요청별 상태 조회 링크를 보관해 주세요. 상태는 30일 동안 조회할 수 있습니다. 서버 삭제 완료 후 현재 컴퓨터의 해당 연결 정보도 정리하며, 요청 도중 새로 로그인한 세션은 보존합니다. 로컬 정리만 실패한 경우 서버 완료 상태와 조회 링크를 유지해 안내하므로 삭제 요청을 반복할 필요는 없습니다.
+
+`disconnect_threads`는 현재 연결을 해제하는 도구로 전체 자료 삭제와 다릅니다. Meta 설정에서 연결을 해제해도 이 서비스 자료가 자동 삭제되지 않습니다. 도구를 이용할 수 없거나 이미 Meta 연결을 해제했다면 [데이터 삭제 안내](https://mcp.rabbitdevelopment.net/data-deletion)에 따라 지원 메일로 요청해 주세요. 비밀번호나 접근 토큰은 보내지 마세요.
 
 ## 자주 막히는 단계
 

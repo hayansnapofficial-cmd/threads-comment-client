@@ -1,5 +1,8 @@
 ﻿# Explicit integration check: real npm in a temporary directory, mocked Codex registration.
 # Requires npm ci in this repository so the test MCP SDK is available.
+[CmdletBinding()]
+param([string]$PackageDirectory = (Join-Path $PSScriptRoot '..'))
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../install.ps1')
@@ -20,16 +23,16 @@ function Invoke-InstallerCommand {
 }
 
 try {
-    Invoke-ThreadsClientInstall -PackageDirectory (Join-Path $PSScriptRoot '..') -LocalAppData $script:SmokeRoot
+    Invoke-ThreadsClientInstall -PackageDirectory $PackageDirectory -LocalAppData $script:SmokeRoot
     if ($null -eq $script:Registration) { throw 'Registration was not reached' }
     $node = $script:Registration[4]
     $entry = $script:Registration[5]
     if (-not [IO.Path]::IsPathRooted($node) -or -not [IO.Path]::GetFullPath($entry).StartsWith([IO.Path]::GetFullPath($script:SmokeRoot) + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Unexpected registered command paths' }
-    $check = "const {Client}=await import('@modelcontextprotocol/client'); const {StdioClientTransport}=await import('@modelcontextprotocol/client/stdio'); const client=new Client({name:'installer-smoke',version:'1.0.0'}); try { await client.connect(new StdioClientTransport({command:process.execPath,args:[process.argv[1]]})); const {tools}=await client.listTools(); if(tools.length!==18) throw new Error('Unexpected tool count '+tools.length); console.log('PASS installed MCP SDK initialize + listTools: '+tools.length); } finally { await client.close(); }"
+    $check = "const {Client}=await import('@modelcontextprotocol/client'); const {StdioClientTransport}=await import('@modelcontextprotocol/client/stdio'); const client=new Client({name:'installer-smoke',version:'1.0.0'}); try { await client.connect(new StdioClientTransport({command:process.execPath,args:[process.argv[1]]})); const {tools}=await client.listTools(); if(tools.length!==19) throw new Error('Unexpected tool count '+tools.length); console.log('PASS installed MCP SDK initialize + listTools: '+tools.length); } finally { await client.close(); }"
     Push-Location (Join-Path $PSScriptRoot '..')
     try { Invoke-RealInstallerCommand -CommandPath $node -Arguments @('--input-type=module', '--eval', $check, $entry) }
     finally { Pop-Location }
-    Write-Host 'PASS real npm install, Node import, MCP initialization, and 18-tool list. No account/provider operations.'
+    Write-Host 'PASS real npm install, Node import, MCP initialization, and 19-tool list. No account/provider operations.'
 } finally {
     $resolved = [IO.Path]::GetFullPath($script:SmokeRoot)
     $allowed = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
