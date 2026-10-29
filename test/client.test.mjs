@@ -65,6 +65,16 @@ test('logged out status is local; protected tool cannot run', async () => {
   assert.equal(calls.length, 0);
 });
 
+test('history sync sends one bounded account-scoped request and leaves checkpoints on the server', async () => {
+  const progress = {status:'scanning',pages:2,completedPasses:0,knownReplies:180,seenThisPass:180,resolved:10,unresolved:170,pending:170,errors:[],readyForPublication:false,validUntil:null,nextStep:'Continue the current scan',coverage:'Two complete passes required'};
+  const f = fixture(() => ({content:[{type:'text',text:JSON.stringify(progress)}],structuredContent:{result:progress}}), session());
+  const input = {maxPages:2,maxParents:10,restart:false,retryUnresolved:false};
+  const response = await f.client.call('sync_reply_history', input);
+  assert.deepEqual(response.structuredContent.result, progress);assert.equal(f.calls.length,1,'incomplete progress does not automatically loop or use a paid fallback');
+  assert.equal(f.calls[0].url,`${serviceUrl}api/tools/sync_reply_history`);assert.deepEqual(f.calls[0].body,input);assert.equal(f.calls[0].options.headers.Authorization,`Bearer ${sessionToken}`);
+  assert.equal(f.store.value().accessToken,sessionToken);
+});
+
 test('connect uses S256 and returns only a same-origin login URL, never verifier', async () => {
   const {client, calls, store} = fixture(call => call.url.endsWith('connect/start') ? started() : {status: 'pending'});
   const begin = await client.connect();
@@ -301,7 +311,7 @@ test('OS credential store roundtrip protects the saved platform session', async 
   }
 });
 
-test('packaged entry point serves 19 MCP tools and validates destructive deletion input without URL configuration', async () => {
+test('packaged entry point serves 20 MCP tools and validates history batch and destructive deletion inputs', async () => {
   const parent = resolve(tmpdir());
   const directory = await mkdtemp(join(parent, 'threads-client-stdio-test-'));
   const client = new Client({name: 'distributed-client-test', version: '1.0.0'});
@@ -309,14 +319,23 @@ test('packaged entry point serves 19 MCP tools and validates destructive deletio
   try {
     await client.connect(transport);
     const {tools} = await client.listTools();
-    assert.equal(tools.length, 19);
-    assert.equal(new Set(tools.map(tool => tool.name)).size, 19);
+    assert.equal(tools.length, 20);
+    assert.equal(new Set(tools.map(tool => tool.name)).size, 20);
     const search = tools.find(tool => tool.name === 'search_threads');
     assert.equal(search.inputSchema.properties.query.type, 'string');
     assert.equal(search.inputSchema.properties.limit.maximum, 50);
     assert.ok(!search.inputSchema.required.includes('limit'), 'server-defaulted input stays optional');
     assert.equal(tools.find(tool => tool.name === 'publish_reply').inputSchema.properties.userConfirmed.const, true);
     assert.ok(tools.find(tool => tool.name === 'set_business_profile').inputSchema.properties.services);
+    const sync = tools.find(tool => tool.name === 'sync_reply_history');
+    assert.deepEqual(sync.annotations,{readOnlyHint:false,destructiveHint:false,idempotentHint:false,openWorldHint:true});
+    assert.equal(sync.inputSchema.properties.maxPages.minimum,1);assert.equal(sync.inputSchema.properties.maxPages.maximum,5);assert.equal(sync.inputSchema.properties.maxPages.default,2);
+    assert.equal(sync.inputSchema.properties.maxParents.minimum,1);assert.equal(sync.inputSchema.properties.maxParents.maximum,25);assert.equal(sync.inputSchema.properties.maxParents.default,10);
+    assert.equal(sync.inputSchema.properties.restart.default,false);assert.equal(sync.inputSchema.properties.retryUnresolved.default,false);assert.equal(sync.inputSchema.additionalProperties,false);
+    assert.ok(!sync.inputSchema.required?.length,'server-defaulted sync input remains optional');
+    for(const input of [{maxPages:6},{maxParents:26},{accountId:'another-account'},{after:'caller-cursor'}]) {
+      const invalidSync = await client.callTool({name:'sync_reply_history',arguments:input});assert.equal(invalidSync.isError,true);assert.ok(!JSON.stringify(invalidSync).includes('LOGIN_REQUIRED'),'invalid sync input fails before authentication or network');
+    }
     const remove = tools.find(tool => tool.name === 'delete_account_data');
     assert.equal(remove.annotations.destructiveHint, true);assert.equal(remove.annotations.readOnlyHint, false);assert.equal(remove.annotations.idempotentHint, true);
     assert.equal(remove.inputSchema.properties.confirmationUsername.type, 'string');assert.equal(remove.inputSchema.properties.requestId.format, 'uuid');assert.deepEqual([...remove.inputSchema.required].sort(), ['confirmationUsername','requestId']);assert.equal(remove.inputSchema.additionalProperties, false);

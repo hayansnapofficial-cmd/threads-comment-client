@@ -52,7 +52,7 @@ try {
     }
     Test-Case 'install target stays below local app data and refuses a file ancestor' {
         $local = Join-Path $script:TestRoot 'local data'
-        $expected = Join-Path $local 'ThreadsCommentMcp/customer-client/0.1.2'
+        $expected = Join-Path $local 'ThreadsCommentMcp/customer-client/0.1.3'
         Assert-True ((Get-SafeInstallDirectory $local) -eq [IO.Path]::GetFullPath($expected)) 'versioned target'
         Assert-Throws { Get-SafeInstallDirectory '' } 'empty path rejected'
         Assert-Throws { Get-SafeInstallDirectory 'relative/path' } 'relative path rejected'
@@ -84,7 +84,7 @@ try {
         $script:Calls = [Collections.Generic.List[object]]::new()
         $script:FailNpm = $false
         $script:MissingCommand = ''
-        $script:MetadataVersion = '0.1.2'
+        $script:MetadataVersion = '0.1.3'
     }
     Test-Case 'check-only verifies prerequisites without creating install directory or registering MCP' {
         Reset-Mocks
@@ -109,7 +109,7 @@ try {
         Assert-True ($npm.Arguments -contains '--omit=dev') 'development dependencies omitted'
         $codex = @($script:Calls | Where-Object Command -eq 'codex.exe')[0]
         Assert-True (($codex.Arguments[0..4] -join '|') -eq 'mcp|add|threads-comments|--|node.exe') 'only intended MCP registered'
-        Assert-True ($codex.Arguments[5] -eq (Join-Path $local 'ThreadsCommentMcp/customer-client/0.1.2/node_modules/threads-comment-client/src/index.mjs')) 'entry argument preserves spaces'
+        Assert-True ($codex.Arguments[5] -eq (Join-Path $local 'ThreadsCommentMcp/customer-client/0.1.3/node_modules/threads-comment-client/src/index.mjs')) 'entry argument preserves spaces'
         Invoke-ThreadsClientInstall -PackageDirectory $script:PackageDirectory -LocalAppData $local
         Assert-True (@($script:Calls | Where-Object Command -eq 'codex.exe').Count -eq 2) 'same registration on repeat'
     }
